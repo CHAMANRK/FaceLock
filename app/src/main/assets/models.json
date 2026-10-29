@@ -1,0 +1,29 @@
+{
+  "_note": "default + threshold are overwritten by tools/benchmark.py --update-config in CI. Thresholds are cosine-similarity cut-offs. Add your own float32 NHWC .tflite model by dropping it in assets/models/ and adding an entry here.",
+  "default": "mobilefacenet",
+  "models": [
+    {
+      "id": "mobilefacenet",
+      "label": "MobileFaceNet (112px, 192-d)",
+      "file": "mobilefacenet.tflite",
+      "norm": "fixed",
+      "mean": 127.5,
+      "std": 128.0,
+      "threshold": 0.5
+    },
+    {
+      "id": "facenet128",
+      "label": "FaceNet (160px, 128-d)",
+      "file": "facenet.tflite",
+      "norm": "per_image",
+      "threshold": 0.5
+    },
+    {
+      "id": "facenet512",
+      "label": "FaceNet (160px, 512-d)",
+      "file": "facenet_512.tflite",
+      "norm": "per_image",
+      "threshold": 0.5
+    }
+  ]
+}

@@ -1,0 +1,68 @@
+name: Build FaceLock APK
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      run_benchmark:
+        description: "Benchmark the models and pick the most accurate one"
+        type: boolean
+        default: true
+
+jobs:
+  benchmark:
+    # 1) Compare the models on LFW and write the winner + thresholds into models.json
+    if: github.event_name != 'workflow_dispatch' || inputs.run_benchmark
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install benchmark deps
+        run: pip install ai-edge-litert numpy pillow scikit-learn
+      - name: Download models
+        run: bash tools/fetch_models.sh
+      - name: Run benchmark
+        run: python tools/benchmark.py --update-config
+      - uses: actions/upload-artifact@v4
+        with:
+          name: benchmark
+          path: |
+            benchmark_results.json
+            app/src/main/assets/models.json
+
+  build:
+    # 2) Compile the APK (with the benchmark winner as the "Auto" model)
+    needs: [benchmark]
+    if: ${{ !cancelled() && (needs.benchmark.result == 'success' || needs.benchmark.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.9"
+      - name: Download models
+        run: bash tools/fetch_models.sh
+      - name: Use benchmark result
+        if: needs.benchmark.result == 'success'
+        uses: actions/download-artifact@v4
+        with:
+          name: benchmark
+          path: bench
+      - name: Apply benchmark models.json
+        if: needs.benchmark.result == 'success'
+        run: cp bench/app/src/main/assets/models.json app/src/main/assets/models.json
+      - name: Build debug APK
+        run: gradle :app:assembleDebug --no-daemon --stacktrace
+      - uses: actions/upload-artifact@v4
+        with:
+          name: FaceLock-debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
