@@ -17,6 +17,8 @@ import com.google.android.gms.tasks.Tasks
  * before the match is accepted — a basic guard against a held-up photo (not a full anti-spoof).
  */
 class VerifyActivity : AppCompatActivity() {
+    private companion object { const val WINDOW = 5 }
+
     private lateinit var engine: FaceEngine
     private lateinit var store: FaceStore
     private lateinit var prefs: Prefs
@@ -29,7 +31,7 @@ class VerifyActivity : AppCompatActivity() {
     private enum class Blink { WAIT_OPEN, WAIT_CLOSED, WAIT_REOPEN, DONE }
     private var blink = Blink.WAIT_OPEN
     private var done = false
-    private var lastScore = Float.NaN
+    private val recent = ArrayDeque<Float>()
 
     private val askCamera = registerForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
         if (ok) startCamera() else hint.setText(R.string.camera_denied)
@@ -66,7 +68,13 @@ class VerifyActivity : AppCompatActivity() {
         }
         val face = FaceDetect.largest(faces)
         if (face == null) {
+            recent.clear()
             ui { result.setTextColor(Color.GRAY); result.setText(R.string.no_face_in_view) }
+            return
+        }
+        if (face.boundingBox.width() < 90 || !FaceDetect.isFrontal(face, 25f, 25f)) {
+            recent.clear()
+            ui { result.setTextColor(Color.GRAY); result.setText(R.string.look_straight) }
             return
         }
 
@@ -87,12 +95,17 @@ class VerifyActivity : AppCompatActivity() {
                 ui { result.setTextColor(Color.GRAY); result.setText(R.string.please_blink) }
                 return
             }
-            // the frame where the eyes re-opened is used for the match below
         }
 
+        val aligned = FaceDetect.align(frame, face)
+        if (aligned == null) {
+            recent.clear()
+            ui { result.setTextColor(Color.GRAY); result.setText(R.string.no_landmarks) }
+            return
+        }
         val spec = engine.activeModel(prefs.modelChoice)
         val probe = try {
-            engine.embedder(spec.id).embed(FaceDetect.crop(frame, face.boundingBox))
+            engine.embedder(spec.id).embed(aligned)
         } catch (e: Exception) {
             return
         }
@@ -101,19 +114,31 @@ class VerifyActivity : AppCompatActivity() {
             ui { result.setTextColor(Color.RED); result.setText(R.string.enroll_first) }
             return
         }
-        lastScore = score
+
+        // Decide on several consecutive frames, not one lucky frame.
+        recent.addLast(score)
+        if (recent.size > WINDOW) recent.removeFirst()
         val threshold = spec.threshold + prefs.strictness
-        if (score >= threshold) {
+        if (recent.size < WINDOW) {
+            ui {
+                result.setTextColor(Color.GRAY)
+                result.text = getString(R.string.checking_fmt, recent.size, WINDOW)
+            }
+            return
+        }
+        val avg = recent.average().toFloat()
+        val worst = recent.minOrNull() ?: 0f
+        if (avg >= threshold && worst >= threshold - 0.10f) {
             done = true
             ui {
                 result.setTextColor(Color.rgb(0, 150, 60))
-                result.text = getString(R.string.unlocked_fmt, score, threshold, spec.label)
+                result.text = getString(R.string.unlocked_fmt, avg, threshold, spec.label)
                 hint.setText(R.string.unlocked)
             }
         } else {
             ui {
                 result.setTextColor(Color.RED)
-                result.text = getString(R.string.no_match_fmt, score, threshold, spec.label)
+                result.text = getString(R.string.no_match_fmt, avg, threshold, spec.label)
             }
         }
     }

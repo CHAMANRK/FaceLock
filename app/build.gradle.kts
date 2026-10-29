@@ -12,7 +12,10 @@ android {
         minSdk = 26
         targetSdk = 34
         versionCode = 1
-        versionName = "0.1.0"
+        versionName = "0.2.0"
+
+        // phones are arm64; keeps the APK small (ONNX Runtime ships one .so per ABI)
+        ndk { abiFilters += listOf("arm64-v8a") }
     }
 
     buildTypes {
@@ -29,10 +32,6 @@ android {
         jvmTarget = "17"
     }
 
-    // .tflite files must stay uncompressed so they can be memory-mapped from assets
-    androidResources {
-        noCompress += "tflite"
-    }
 }
 
 dependencies {
@@ -48,10 +47,10 @@ dependencies {
     implementation("androidx.camera:camera-lifecycle:$camerax")
     implementation("androidx.camera:camera-view:$camerax")
 
-    // Face detection (finds the face + eye-open probabilities for the blink check)
+    // Face detection (face box, landmarks for alignment, head angles, eye-open probabilities for the blink check)
     implementation("com.google.mlkit:face-detection:16.1.6")
     implementation("com.google.android.gms:play-services-tasks:18.2.0")
 
-    // Face embedding models (.tflite)
-    implementation("org.tensorflow:tensorflow-lite:2.14.0")
+    // Face embedding model (ArcFace, .onnx)
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.19.2")
 }

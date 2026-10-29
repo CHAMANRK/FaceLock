@@ -19,7 +19,7 @@ data class ModelSpec(
 data class ModelConfig(val defaultId: String, val models: List<ModelSpec>)
 
 object ModelRegistry {
-    /** Reads models.json and keeps only the models whose .tflite file is actually in the APK. */
+    /** Reads models.json and keeps only the models whose .onnx file is actually in the APK. */
     fun load(ctx: Context): ModelConfig {
         val text = ctx.assets.open("models.json").bufferedReader().use { it.readText() }
         val json = JSONObject(text)

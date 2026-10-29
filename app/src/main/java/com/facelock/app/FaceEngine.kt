@@ -27,7 +27,7 @@ class FaceEngine private constructor(ctx: Context) {
     fun embedAll(face: Bitmap): Map<String, FloatArray> =
         models.associate { it.id to embedder(it.id).embed(face) }
 
-    /** "auto" = the model chosen by the CI benchmark (models.json "default"). */
+    /** "auto" = the model named "default" in models.json. */
     fun activeModel(choice: String): ModelSpec {
         val picked = if (choice != "auto") models.firstOrNull { it.id == choice } else null
         return picked ?: models.firstOrNull { it.id == config.defaultId } ?: models.first()

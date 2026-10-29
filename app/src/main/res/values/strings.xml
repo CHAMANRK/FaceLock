@@ -7,9 +7,9 @@
     <string name="confirm_clear">Delete all enrolled faces?</string>
     <string name="model_title">Face model</string>
     <string name="blink_check">Blink check (live-ness)</string>
-    <string name="strictness_fmt">Strictness: %+.2f (higher = fewer false matches, more rejections)</string>
+    <string name="strictness_fmt">Strictness: %+.2f (higher = stricter; base threshold 0.50)</string>
     <string name="status_fmt">Enrolled samples: %1$d  (live: %2$d, gallery: %3$d)</string>
-    <string name="enroll_info_fmt">Samples: %1$d  (live: %2$d, gallery: %3$d). Add 5+ from different angles/light.</string>
+    <string name="enroll_info_fmt">Samples: %1$d  (live: %2$d, gallery: %3$d). Add 6+ live samples: straight, slight angles, with and without glasses.</string>
     <string name="capture_live">Capture live</string>
     <string name="from_gallery">From gallery</string>
     <string name="face_added">Face added</string>
@@ -23,6 +23,11 @@
     <string name="look_at_camera">Look at the camera</string>
     <string name="please_blink">Face seen — please blink</string>
     <string name="no_face_in_view">No face in view</string>
+    <string name="look_straight">Look straight at the camera (face closer, not tilted)</string>
+    <string name="face_not_frontal">Face not straight — look at the camera</string>
+    <string name="face_too_small">Face too small — move closer</string>
+    <string name="no_landmarks">Could not see eyes/mouth clearly — try better light</string>
+    <string name="checking_fmt">Checking… %1$d/%2$d</string>
     <string name="unlocked">Unlocked</string>
     <string name="unlocked_fmt">UNLOCKED ✔\nscore %1$.2f ≥ %2$.2f\n%3$s</string>
     <string name="no_match_fmt">Not a match\nscore %1$.2f &lt; %2$.2f\n%3$s</string>

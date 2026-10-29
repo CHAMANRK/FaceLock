@@ -1,78 +1,57 @@
 package com.facelock.app
 
+import ai.onnxruntime.OnnxTensor
+import ai.onnxruntime.OrtEnvironment
+import ai.onnxruntime.OrtSession
+import ai.onnxruntime.TensorInfo
 import android.content.Context
 import android.graphics.Bitmap
-import org.tensorflow.lite.Interpreter
 import java.io.Closeable
-import java.io.FileInputStream
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
-import java.nio.channels.FileChannel
-import kotlin.math.max
+import java.nio.FloatBuffer
 import kotlin.math.sqrt
 
 /**
- * Runs one float32 NHWC face-embedding .tflite model.
- * Input size and batch size are read from the model itself (MobileFaceNet wants batch = 2),
- * so the same face is simply repeated across the batch and only the first output is used.
+ * Runs one ArcFace-style ONNX model: input [1,3,S,S] RGB (NCHW), output [1,D].
+ * The bitmap passed to [embed] must already be an ALIGNED face (see FaceDetect.align).
  */
 class Embedder(ctx: Context, val spec: ModelSpec) : Closeable {
-    private val interpreter: Interpreter
-    private val batch: Int
+    private val env = OrtEnvironment.getEnvironment()
+    private val session: OrtSession
+    private val inputName: String
     private val size: Int
-    private val outDim: Int
 
     init {
-        val mapped = ctx.assets.openFd("models/${spec.file}").use { fd ->
-            FileInputStream(fd.fileDescriptor).channel
-                .map(FileChannel.MapMode.READ_ONLY, fd.startOffset, fd.declaredLength)
-        }
-        interpreter = Interpreter(mapped, Interpreter.Options().setNumThreads(4))
-        val inShape = interpreter.getInputTensor(0).shape() // [batch, h, w, 3]
-        batch = inShape[0]
-        size = inShape[1]
-        outDim = interpreter.getOutputTensor(0).shape().last()
+        val bytes = ctx.assets.open("models/${spec.file}").use { it.readBytes() }
+        val opts = OrtSession.SessionOptions().apply { setIntraOpNumThreads(4) }
+        session = env.createSession(bytes, opts)
+        inputName = session.inputNames.first()
+        val shape = (session.inputInfo[inputName]!!.info as TensorInfo).shape
+        size = shape.last().toInt().takeIf { it > 0 } ?: 112
     }
 
-    /** Returns an L2-normalised embedding for an (already cropped) face. */
+    /** Returns an L2-normalised embedding for an aligned face. */
     @Synchronized
-    fun embed(face: Bitmap): FloatArray {
-        val scaled = Bitmap.createScaledBitmap(face, size, size, true)
+    @Suppress("UNCHECKED_CAST")
+    fun embed(aligned: Bitmap): FloatArray {
+        val bmp = if (aligned.width == size && aligned.height == size) aligned
+        else Bitmap.createScaledBitmap(aligned, size, size, true)
         val px = IntArray(size * size)
-        scaled.getPixels(px, 0, size, 0, 0, size, size)
+        bmp.getPixels(px, 0, size, 0, 0, size, size)
 
-        val one = FloatArray(size * size * 3)
+        val plane = size * size
+        val data = FloatArray(3 * plane)
         for (i in px.indices) {
             val p = px[i]
-            one[i * 3] = ((p shr 16) and 0xFF).toFloat()
-            one[i * 3 + 1] = ((p shr 8) and 0xFF).toFloat()
-            one[i * 3 + 2] = (p and 0xFF).toFloat()
+            data[i] = (((p shr 16) and 0xFF) - spec.mean) / spec.std            // R
+            data[plane + i] = (((p shr 8) and 0xFF) - spec.mean) / spec.std     // G
+            data[2 * plane + i] = ((p and 0xFF) - spec.mean) / spec.std         // B
         }
-        normalise(one)
 
-        val buf = ByteBuffer.allocateDirect(4 * batch * one.size).order(ByteOrder.nativeOrder())
-        val fb = buf.asFloatBuffer()
-        repeat(batch) { fb.put(one) }
-
-        val out = Array(batch) { FloatArray(outDim) }
-        interpreter.run(buf, out)
-        return l2(out[0])
-    }
-
-    private fun normalise(a: FloatArray) {
-        if (spec.norm == "per_image") {
-            var sum = 0.0
-            for (v in a) sum += v
-            val mean = (sum / a.size).toFloat()
-            var sq = 0.0
-            for (v in a) {
-                val d = v - mean
-                sq += d * d
+        val shape = longArrayOf(1, 3, size.toLong(), size.toLong())
+        return OnnxTensor.createTensor(env, FloatBuffer.wrap(data), shape).use { tensor ->
+            session.run(mapOf(inputName to tensor)).use { res ->
+                l2((res[0].value as Array<FloatArray>)[0])
             }
-            val std = max(sqrt(sq / a.size).toFloat(), 1f / sqrt(a.size.toFloat()))
-            for (i in a.indices) a[i] = (a[i] - mean) / std
-        } else {
-            for (i in a.indices) a[i] = (a[i] - spec.mean) / spec.std
         }
     }
 
@@ -83,5 +62,7 @@ class Embedder(ctx: Context, val spec: ModelSpec) : Closeable {
         return FloatArray(v.size) { v[it] / n }
     }
 
-    override fun close() = interpreter.close()
+    override fun close() {
+        session.close()
+    }
 }

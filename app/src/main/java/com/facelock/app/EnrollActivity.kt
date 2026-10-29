@@ -76,7 +76,7 @@ class EnrollActivity : AppCompatActivity() {
             var added = 0
             for (uri in uris) {
                 val bmp = FaceDetect.loadFromUri(this, uri) ?: continue
-                if (enrol(bmp, "gallery")) added++
+                if (enrol(bmp, "gallery") == 0) added++
             }
             runOnUiThread {
                 toast(getString(R.string.gallery_result_fmt, added, uris.size))
@@ -87,24 +87,29 @@ class EnrollActivity : AppCompatActivity() {
 
     private fun process(bmp: Bitmap, source: String) {
         worker.execute {
-            val ok = enrol(bmp, source)
+            val code = enrol(bmp, source)
             runOnUiThread {
-                toast(if (ok) getString(R.string.face_added) else getString(R.string.no_face_found))
+                toast(if (code == 0) getString(R.string.face_added) else getString(code))
                 updateInfo()
             }
         }
     }
 
-    /** Detects the biggest face, embeds it with every model and stores it. Must run off the main thread. */
-    private fun enrol(bmp: Bitmap, source: String): Boolean {
+    /**
+     * Detects the biggest face, aligns it, embeds it and stores it. Must run off the main thread.
+     * Returns 0 on success, otherwise the string resource explaining why it was rejected.
+     */
+    private fun enrol(bmp: Bitmap, source: String): Int {
         return try {
             val faces = Tasks.await(detector.process(FaceDetect.inputImage(bmp)))
-            val face = FaceDetect.largest(faces) ?: return false
-            val crop = FaceDetect.crop(bmp, face.boundingBox)
-            store.add(FaceStore.Sample(source, System.currentTimeMillis(), engine.embedAll(crop)))
-            true
+            val face = FaceDetect.largest(faces) ?: return R.string.no_face_found
+            if (face.boundingBox.width() < 90) return R.string.face_too_small
+            if (!FaceDetect.isFrontal(face)) return R.string.face_not_frontal
+            val aligned = FaceDetect.align(bmp, face) ?: return R.string.no_landmarks
+            store.add(FaceStore.Sample(source, System.currentTimeMillis(), engine.embedAll(aligned)))
+            0
         } catch (e: Exception) {
-            false
+            R.string.no_face_found
         }
     }
 

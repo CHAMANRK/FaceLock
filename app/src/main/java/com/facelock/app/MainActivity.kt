@@ -40,7 +40,7 @@ class MainActivity : AppCompatActivity() {
 
         val auto = engine.activeModel("auto")
         choices = listOf("auto") + engine.models.map { it.id }
-        val labels = listOf("Auto — best from benchmark (${auto.label})") + engine.models.map { it.label }
+        val labels = listOf("Auto (${auto.label})") + engine.models.map { it.label }
         spinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, labels)
         spinner.setSelection(choices.indexOf(prefs.modelChoice).coerceAtLeast(0))
         spinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {

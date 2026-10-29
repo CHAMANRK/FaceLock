@@ -8,4 +8,4 @@ local.properties
 captures/
 
 # models are downloaded in CI by tools/fetch_models.sh (uncomment to commit them instead)
-app/src/main/assets/models/*.tflite
+app/src/main/assets/models/*.onnx
